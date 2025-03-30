@@ -36,14 +36,18 @@ class BasePolicy(ABC, nn.Module):
             layer = get_layer([input_dim, output_dim])
             self.hidden_layers.extend([layer, act_fun()])
         
-        if type(action_space) == gym.spaces.Discrete:
-            self.act_dim = action_space.n
-        elif type(action_space) == gym.spaces.Box:
-            self.act_dim = action_space.shape[0]
-        elif type(action_space) == gym.spaces.MultiBinary:
-            self.act_dim = action_space.shape[0]
-        else:
-            raise TypeError
+
+        # HARDCODED
+        self.act_dim = action_space.shape[0]
+        
+        # if type(action_space) == gym.spaces.Discrete:
+        #     self.act_dim = action_space.n
+        # elif type(action_space) == gym.spaces.Box:
+        #     self.act_dim = action_space.shape[0]
+        # elif type(action_space) == gym.spaces.MultiBinary:
+        #     self.act_dim = action_space.shape[0]
+        # else:
+        #     raise TypeError
 
         
     @abstractmethod

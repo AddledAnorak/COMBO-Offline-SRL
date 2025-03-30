@@ -8,11 +8,11 @@ class Lagrange:
         lagrangian_multiplier_init: float,
         lambda_lr: float,
         lambda_optimizer: str,
-        lagrangian_upper_bound: float | None = None,
+        lagrangian_upper_bound: float = 1000000,
     ) -> None:
         self.cost_limit: float = cost_limit
         self.lambda_lr: float = lambda_lr
-        self.lagrangian_upper_bound: float | None = lagrangian_upper_bound
+        self.lagrangian_upper_bound: float = lagrangian_upper_bound
 
         init_value = max(lagrangian_multiplier_init, 0.0)
         self.lagrangian_multiplier: torch.nn.Parameter = torch.nn.Parameter(

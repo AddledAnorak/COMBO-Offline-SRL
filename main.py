@@ -38,8 +38,8 @@ def train(args = get_args()):
     set_device()
     set_global_seed(args.seed)
     # env
-    env = gym.make(args.task)
-    env.seed(seed = args.seed)
+    env = gym.make(args.task, seed = args.seed)
+    # env.seed(seed = args.seed)
     dataset = env.get_dataset()
 
     obs_space = env.observation_space
@@ -59,8 +59,10 @@ def train(args = get_args()):
             break
     assert task != None
 
-    import_path = f"dynamic.static_fns.{task}"
-    static_fns = importlib.import_module(import_path).StaticFns
+    print(task)
+
+    # import_path = f"dynamic.static_fns.{task}"
+    # static_fns = importlib.import_module(import_path).StaticFns
     # dummy static fns
     dummy_static_fns = DummyStaticFns()
     model_lr = trainer_config['model']['learning_rate']
