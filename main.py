@@ -38,6 +38,7 @@ def train(args = get_args()):
     set_device()
     set_global_seed(args.seed)
     # env
+    print(f"task: {args.task}")
     env = gym.make(args.task, seed = args.seed)
     # env.seed(seed = args.seed)
     dataset = env.get_dataset()
