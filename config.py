@@ -1,4 +1,12 @@
 agent_config = {
+    'lagrange' : {
+        'cost_limit' : 10.0,
+        'lambda_optimizer' : 'Adam',
+        'lambda_lr' : 1e-3,
+        'lambda_init' : 1.0,
+        'lambda_upper_bound' : 10.0,
+        'lagrange_start_step' : 1000
+    },
     'q_net' : {
         'hidden_dims' : [256, 256],
         'act_fun' : 'relu',
@@ -35,6 +43,7 @@ agent_config = {
 }
 
 trainer_config = {
+    'cost_limit' : 10.0,
     'max_train_epoch' : 1000,
     'max_traj_len' : 1000,
     'eval_interval' : 10,
@@ -46,6 +55,7 @@ trainer_config = {
         'batch_size' : 128,
         'learning_rate' : 1e-3,
         'reward_penalty_coef' : 0.0,
+        'cost_penalty_coef' : 0.0,
         'hold_out_ratio' : 0.1,
         'max_model_update_epochs_to_improve': 5,
         'max_train_iteraions' : None,

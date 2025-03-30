@@ -33,7 +33,8 @@ def train(args = get_args()):
     # env
     env = gym.make(args.task)
     env.seed(seed = args.seed)
-    dataset = d4rl.qlearning_dataset(env)
+    # dataset = d4rl.qlearning_dataset(env)
+    dataset = env.get_dataset()
 
     obs_space = env.observation_space
     act_space = env.action_space

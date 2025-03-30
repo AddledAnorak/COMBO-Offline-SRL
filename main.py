@@ -12,15 +12,23 @@ from util.setting import set_device, set_global_seed
 from util.logger import Logger
 from torch.utils.tensorboard import SummaryWriter
 from dynamic.transition_model import TransitionModel
-import gym
-import d4rl
+import dsrl
+import safety_gymnasium as gym
 
-TASK_DOMAIN = ['halfcheetah', 'hopper', 'walker2d']
+import numpy as np
+
+TASK_DOMAIN = ['offlinepointgoal2', 'halfcheetah', 'hopper', 'walker2d']
+
+
+class DummyStaticFns:
+    @staticmethod
+    def termination_fn(obs, act, next_obs):
+        return np.array([False]).repeat(len(obs))
 
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--algo", type=str, default="COMBO")
-    parser.add_argument("--task", type=str, default="halfcheetah-medium-replay-v2")
+    parser.add_argument("--task", type=str, default="OfflinePointGoal2-v0")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--logdir", type = str, default = 'log')
 
@@ -32,7 +40,7 @@ def train(args = get_args()):
     # env
     env = gym.make(args.task)
     env.seed(seed = args.seed)
-    dataset = d4rl.qlearning_dataset(env)
+    dataset = env.get_dataset()
 
     obs_space = env.observation_space
     act_space = env.action_space
@@ -42,6 +50,7 @@ def train(args = get_args()):
     model_buffer = ReplayBuffer(obs_space, act_space, buffer_size = len(dataset['observations']))
     # agent
     agent = Agent(obs_space, act_space, **agent_config)
+
     # dynamic model
     task = None
     for key in args.task.split('-'):
@@ -49,11 +58,15 @@ def train(args = get_args()):
             task = key.lower()
             break
     assert task != None
+
     import_path = f"dynamic.static_fns.{task}"
     static_fns = importlib.import_module(import_path).StaticFns
+    # dummy static fns
+    dummy_static_fns = DummyStaticFns()
     model_lr = trainer_config['model']['learning_rate']
     reward_penalty_coef = trainer_config['model']['reward_penalty_coef']
-    model = TransitionModel(obs_space, act_space, static_fns, model_lr, reward_penalty_coef, **trainer_config)
+    cost_penalty_coef = trainer_config['model']['cost_penalty_coef']
+    model = TransitionModel(obs_space, act_space, dummy_static_fns, model_lr, reward_penalty_coef, cost_penalty_coef, **trainer_config)
     # log
     t0 = datetime.datetime.now().strftime("%m%d_%H%M%S")
     log_file = f'seed_{args.seed}_{t0}-{args.task.replace("-", "_")}_{args.algo}'

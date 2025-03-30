@@ -5,7 +5,7 @@ from util.helper import dict_batch_generator
 import torch
 import numpy as np
 from tqdm import tqdm
-import d4rl
+# import d4rl
 from models_tf.tf_dynamics_models.fake_env import FakeEnv
 from models_tf.tf_dynamics_models.constructor import format_samples_for_training
 
@@ -54,7 +54,10 @@ class Trainer(BaseTrainer):
             penalty_coeff = self.penalty_reward_coef,
             penalty_learned_var=True
         )
-        
+
+        # set the target cost
+        self.train_env.set_target_cost(kwargs['cost_limit'])
+        self.eval_env.set_target_cost(kwargs['cost_limit'])
 
     def train_dynamic(self):
         # get train and eval data
@@ -110,7 +113,9 @@ class Trainer(BaseTrainer):
                 for key, item in dict.items():
                     self.log.record(key, item, self.trained_epochs)
                     if key == 'performance/eval_return':
-                        self.log.record(f'normalize_score/{self.task}', d4rl.get_normalized_score(self.task, item), self.trained_epochs)
+                        self.log.record(f'normalize_score/{self.task}', self.train_env.get_normalized_score(item, 0)[0], self.trained_epochs)
+                    elif key == 'performance/eval_cost':
+                        self.log.record(f'normalize_cost/{self.task}', self.train_env.get_normalized_score(0, item)[1], self.trained_epochs)
             
             if self.trained_epochs > 0 and self.trained_epochs % self.log_interval == 0:
                 for key, item in loss.items():

@@ -15,6 +15,7 @@ class TransitionModel:
                  static_fns,
                  lr,
                  reward_penalty_coef,
+                 cost_penalty_coef,
                  holdout_ratio=0.1,
                  inc_var_loss=True,
                  use_weight_decay=False,
@@ -35,6 +36,7 @@ class TransitionModel:
         self.inc_var_loss = inc_var_loss
         self.use_weight_decay = use_weight_decay
         self.reward_penalty_coef = reward_penalty_coef
+        self.cost_penalty_coef = cost_penalty_coef
 
         self.obs_normalizer = StandardNormalizer()
         self.act_normalizer = StandardNormalizer()
@@ -43,24 +45,24 @@ class TransitionModel:
         self.use_penalty = False
 
     def set_use_penalty(self):
-
         self.use_penalty = True
 
     @torch.no_grad()
     def eval_data(self, data, update_elite_models=False):
-        obs_list, action_list, next_obs_list, reward_list = \
-            itemgetter("obs", 'action', 'next_obs', 'reward')(data)
+        obs_list, action_list, next_obs_list, reward_list, cost_list = \
+            itemgetter("obs", 'action', 'next_obs', 'reward', 'cost')(data)
         obs_list = torch.Tensor(obs_list).to(DEVICE)
         action_list = torch.Tensor(action_list).to(DEVICE)
         next_obs_list = torch.Tensor(next_obs_list).to(DEVICE)
         reward_list = torch.Tensor(reward_list).to(DEVICE)
+        cost_list = torch.Tensor(cost_list).to(DEVICE)
         delta_obs_list = next_obs_list - obs_list
         obs_list, action_list = self.transform_obs_action(obs_list, action_list)
         model_input = torch.cat([obs_list, action_list], dim=-1)
         predictions = minibatch_inference(args=[model_input], rollout_fn=self.model.predict,
                                                      batch_size=10000,
                                                      cat_dim=1)  # the inference size grows as model buffer increases
-        groundtruths = torch.cat((delta_obs_list, reward_list), dim=1)
+        groundtruths = torch.cat((delta_obs_list, reward_list, cost_list), dim=1)
         eval_mse_losses, _ = self.model_loss(predictions, groundtruths, mse_only=True)
         if update_elite_models:
             elite_idx = np.argsort(eval_mse_losses.cpu().numpy())
@@ -81,12 +83,13 @@ class TransitionModel:
         return obs, action
 
     def update(self, data_batch):
-        obs_batch, action_batch, next_obs_batch, reward_batch = \
-            itemgetter("obs", 'action', 'next_obs', 'reward')(data_batch)
+        obs_batch, action_batch, next_obs_batch, reward_batch, cost_batch = \
+            itemgetter("obs", 'action', 'next_obs', 'reward', 'cost')(data_batch)
         obs_batch = torch.Tensor(obs_batch).to(DEVICE)
         action_batch = torch.Tensor(action_batch).to(DEVICE)
         next_obs_batch = torch.Tensor(next_obs_batch).to(DEVICE)
         reward_batch = torch.Tensor(reward_batch).to(DEVICE)
+        cost_batch = torch.Tensor(cost_batch).to(DEVICE)
 
         delta_obs_batch = next_obs_batch - obs_batch
         obs_batch, action_batch = self.transform_obs_action(obs_batch, action_batch)
@@ -96,7 +99,7 @@ class TransitionModel:
         predictions = self.model.predict(model_input)
 
         # compute training loss
-        groundtruths = torch.cat((delta_obs_batch, reward_batch), dim=-1)
+        groundtruths = torch.cat((delta_obs_batch, reward_batch, cost_batch), dim=-1)
         train_mse_losses, train_var_losses = self.model_loss(predictions, groundtruths)
         train_mse_loss = torch.sum(train_mse_losses)
         train_var_loss = torch.sum(train_var_losses)
@@ -172,7 +175,11 @@ class TransitionModel:
 
         pred_diff_samples = pred_diff_means[model_idxes, batch_idxes]
 
-        next_obs, rewards = pred_diff_samples[:, :-1] + obs, pred_diff_samples[:, -1]
+        # TODO: recheck this
+        next_obs = pred_diff_samples[:, :-2] + obs
+        rewards = pred_diff_samples[:, -2]
+        costs = pred_diff_samples[:, -1]
+
         terminals = self.static_fns.termination_fn(obs, act, next_obs)
 
         # penalty rewards
@@ -180,6 +187,12 @@ class TransitionModel:
              penalty_coeff = self.reward_penalty_coef
         else:
              penalty_coeff = 0
+
+        # penalty costs
+        if self.use_penalty:
+             penalty_cost_coeff = self.cost_penalty_coef
+        else:
+             penalty_cost_coeff = 0
              
         penalty_learned_var = True
         if penalty_coeff != 0:
@@ -197,15 +210,18 @@ class TransitionModel:
             else:
                 penalty = np.amax(np.linalg.norm(ensemble_model_stds, axis=2), axis=0)
             penalized_rewards = rewards - penalty_coeff * penalty
+            penalized_costs = costs - penalty_cost_coeff * penalty
         else:
             penalty = 0
             penalized_rewards = rewards
+            penalized_costs = costs
 
-        info = {'penalty': penalty, 'penalized_rewards': penalized_rewards}
+        info = {'penalty': penalty, 'penalized_rewards': penalized_rewards, 'penalized_costs': penalized_costs}
         penalized_rewards = penalized_rewards[:, None]
+        penalized_costs = penalized_costs[:, None]
         terminals = terminals[:, None]
          
-        return next_obs, penalized_rewards, terminals, info
+        return next_obs, penalized_rewards, penalized_costs, terminals, info
 
     def update_best_snapshots(self, val_losses):
         updated = False

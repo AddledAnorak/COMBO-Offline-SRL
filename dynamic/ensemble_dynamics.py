@@ -97,10 +97,10 @@ class MLPNetwork(nn.Module):
 
 class EnsembleModel(nn.Module):
     def __init__(self, obs_dim, action_dim, hidden_dims, device, ensemble_size=7, num_elite=5, decay_weights=None,
-                 act_fn="swish", out_act_fn="identity", reward_dim=1, **kwargs):
+                 act_fn="swish", out_act_fn="identity", reward_dim=1, cost_dim=1, **kwargs):
         super(EnsembleModel, self).__init__()
         assert (decay_weights is None or len(decay_weights) == len(hidden_dims) + 1)
-        self.out_dim = obs_dim + reward_dim
+        self.out_dim = obs_dim + reward_dim + cost_dim
 
         self.ensemble_models = [
             MLPNetwork(input_dim=obs_dim + action_dim, out_dim=self.out_dim * 2, hidden_dims=hidden_dims, act_fn=act_fn,

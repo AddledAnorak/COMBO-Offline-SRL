@@ -5,7 +5,7 @@ from util.helper import dict_batch_generator
 import torch
 import numpy as np
 from tqdm import tqdm
-import d4rl
+# import d4rl
 
 class Trainer(BaseTrainer):
     def __init__(self, 
@@ -46,6 +46,9 @@ class Trainer(BaseTrainer):
         self.rollout_batch_size = kwargs['model']['rollout_batch_size']
         self.real_ratio = kwargs['model']['real_ratio']
         
+        # set the target cost
+        self.train_env.set_target_cost(kwargs['cost_limit'])
+        self.eval_env.set_target_cost(kwargs['cost_limit'])
 
     def train_dynamic(self):
         # get train and eval data
@@ -109,8 +112,8 @@ class Trainer(BaseTrainer):
         obs = init_batch['obs']
         for _ in range(self.rollout_length):
             action = self.agent.choose_action(obs, deterministic = False)['action']
-            next_obs, reward, done, info = self.dynamics_model.predict(obs, action)
-            self.model_buffer.add_batch(obs, action, reward, next_obs, done)
+            next_obs, reward, cost, done, info = self.dynamics_model.predict(obs, action)
+            self.model_buffer.add_batch(obs, action, reward, cost, next_obs, done)
             nonterm_mask = (~done).flatten()
             if nonterm_mask.sum() == 0:
                 break
@@ -132,6 +135,7 @@ class Trainer(BaseTrainer):
                         'obs' : torch.cat([real_batch['obs'], fake_batch['obs']], dim = 0),
                         'action' : torch.cat([real_batch['action'], fake_batch['action']], dim = 0),
                         'reward' : torch.cat([real_batch['reward'], fake_batch['reward']], dim = 0),
+                        'cost' : torch.cat([real_batch['cost'], fake_batch['cost']], dim = 0),
                         'next_obs' : torch.cat([real_batch['next_obs'], fake_batch['next_obs']], dim = 0),
                         'done' : torch.cat([real_batch['done'], fake_batch['done']], dim = 0)
                     }
@@ -144,7 +148,9 @@ class Trainer(BaseTrainer):
                 for key, item in dict.items():
                     self.log.record(key, item, self.trained_epochs)
                     if key == 'performance/eval_return':
-                        self.log.record(f'normalize_score/{self.task}', d4rl.get_normalized_score(self.task, item), self.trained_epochs)
+                        self.log.record(f'normalize_score/{self.task}', self.train_env.get_normalized_score(item, 0)[0], self.trained_epochs)
+                    elif key == 'performance/eval_cost':
+                        self.log.record(f'normalize_cost/{self.task}', self.train_env.get_normalized_score(0, item)[1], self.trained_epochs)
             
             if self.trained_epochs > 0 and self.trained_epochs % self.log_interval == 0:
                 for key, item in loss.items():

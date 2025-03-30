@@ -36,29 +36,33 @@ class BaseTrainer(ABC):
     
     def eval(self):
         traj_returns = []
+        traj_costs = []
         traj_lengths = []
         for cnt in range(self.eval_traj_num):
             traj_return = 0
+            traj_cost = 0
             traj_length = 0
             state = self.eval_env.reset()
             for step in range(self.max_traj_len):
                 action = self.agent.choose_action(state, deterministic = True)['action']
-                if len(action) == 1 and type(self.eval_env.action_space) == gym.spaces.discrete.Discrete :
-                    action = action[0]
-                next_state, reward, done, _ = self.eval_env.step(action)
+                # if len(action) == 1 and type(self.eval_env.action_space) == gym.spaces.discrete.Discrete :
+                #     action = action[0]
+                next_state, reward, cost, done, _ = self.eval_env.step(action)
                 state = next_state
                 traj_length += 1
                 traj_return += reward
+                traj_cost += cost
                 if done:
                     break
                 else:
                     state = next_state
             traj_lengths.append(traj_length)
             traj_returns.append(traj_return)
-
+            traj_costs.append(traj_cost)
         return {
             'performance/eval_return' : np.mean(traj_returns),
             'performance/eval_length' : np.mean(traj_lengths), 
+            'performance/eval_cost' : np.mean(traj_costs),
         }
     
     # def save_video_demo(self, ite, width=256, height=256, fps=30):

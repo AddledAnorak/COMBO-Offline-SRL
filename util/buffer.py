@@ -6,7 +6,7 @@ import numpy as np
 import warnings
 from util.setting import DEVICE
 
-Transition = namedtuple('Transition', ['obs', 'action', 'reward', 'next_obs', 'done'])
+Transition = namedtuple('Transition', ['obs', 'action', 'reward', 'cost', 'next_obs', 'done'])
 
 class BaseBuffer(ABC):
     
@@ -14,11 +14,11 @@ class BaseBuffer(ABC):
         raise NotImplementedError
     
     @abstractmethod
-    def add_transition(self, obs, action, reward, next_obs, done):
+    def add_transition(self, obs, action, reward, next_obs, done, cost):
         raise NotImplementedError
     
     @abstractmethod
-    def add_traj(self, obs_list, action_list, reward_list, next_obs_list, done_list):
+    def add_traj(self, obs_list, action_list, reward_list, next_obs_list, done_list, cost_list):
         raise NotImplementedError
 
     @abstractmethod
@@ -37,38 +37,43 @@ class ReplayBuffer(BaseBuffer):
         self.action_space = action_space
         self.obs_dim = obs_space.shape[0]
 
-        if type(action_space) == gym.spaces.discrete.Discrete:
-            self.action_dim = 1
-            self.discrete_action = True
-        elif type(action_space) == gym.spaces.box.Box:
-            self.action_dim = action_space.shape[0]
-            self.discrete_action = False
-        else:
-            raise NotImplementedError('Not support type for action space')
+        self.action_dim = action_space.shape[0]
+        self.discrete_action = False
+
+        # if type(action_space) == gym.spaces.discrete.Discrete:
+        #     self.action_dim = 1
+        #     self.discrete_action = True
+        # elif type(action_space) == gym.spaces.box.Box:
+        #     self.action_dim = action_space.shape[0]
+        #     self.discrete_action = False
+        # else:
+        #     raise NotImplementedError('Not support type for action space')
         
         self.obs_buf = np.zeros((self.buf_size, self.obs_dim))
         self.next_obs_buf = np.zeros((self.buf_size, self.obs_dim))
         self.action_buf = np.zeros((self.buf_size, self.action_dim))
         self.reward_buf = np.zeros((self.buf_size, 1))
+        self.cost_buf = np.zeros((self.buf_size, 1))
         self.done_buf = np.zeros((self.buf_size, 1))
 
         self.allow_size = 0
 
-    def add_transition(self, obs, action, reward, next_obs, done):
+    def add_transition(self, obs, action, reward, next_obs, done, cost):
         self.obs_buf[self.cur] = obs
         self.action_buf[self.cur] = action
         self.reward_buf[self.cur] = reward
+        self.cost_buf[self.cur] = cost
         self.next_obs_buf[self.cur] = next_obs
         self.done_buf[self.cur] = done
 
         self.cur = (self.cur + 1) % self.buf_size
         self.allow_size = min(self.allow_size + 1, self.buf_size)
 
-    def add_traj(self, obs_list, action_list, reward_list, next_obs_list, done_list):
-        for obs, action, reward, next_obs, done in zip(obs_list, action_list, reward_list, next_obs_list, done_list):
-            self.add_transition(obs, action, reward, next_obs, done)
+    def add_traj(self, obs_list, action_list, reward_list, next_obs_list, done_list, cost_list):
+        for obs, action, reward, next_obs, done, cost in zip(obs_list, action_list, reward_list, next_obs_list, done_list, cost_list):
+            self.add_transition(obs, action, reward, next_obs, done, cost)
 
-    def add_batch(self, obs, action, reward, next_obs, done):
+    def add_batch(self, obs, action, reward, next_obs, done, cost):
         batch_size = obs.shape[0]
         if type(obs) == torch.Tensor:
             obs = obs.cpu().numpy()
@@ -82,7 +87,7 @@ class ReplayBuffer(BaseBuffer):
             done = done.cpu().numpy()
 
         for idx in range(batch_size):
-            self.add_transition(obs[idx], action[idx], reward[idx], next_obs[idx], done[idx])
+            self.add_transition(obs[idx], action[idx], reward[idx], next_obs[idx], done[idx], cost[idx])
 
     def sample(self, batch_size, to_tensor = True, seq = False, duplicate = False):
         if not duplicate and batch_size > self.allow_size:
@@ -97,8 +102,8 @@ class ReplayBuffer(BaseBuffer):
         else:
             idx = np.random.choice(range(self.allow_size), size = batch_size, replace = duplicate)
         
-        batch_obs, batch_act, batch_reward, batch_next_obs, batch_done = self.obs_buf[idx], self.action_buf[idx], \
-                                                                         self.reward_buf[idx],  self.next_obs_buf[idx], \
+        batch_obs, batch_act, batch_reward, batch_cost, batch_next_obs, batch_done = self.obs_buf[idx], self.action_buf[idx], \
+                                                                         self.reward_buf[idx], self.cost_buf[idx], self.next_obs_buf[idx], \
                                                                          self.done_buf[idx]
         if to_tensor:
             batch_obs = torch.FloatTensor(batch_obs).to(DEVICE)
@@ -107,6 +112,7 @@ class ReplayBuffer(BaseBuffer):
             else:
                 batch_act = torch.FloatTensor(batch_act).to(DEVICE)
             batch_reward = torch.FloatTensor(batch_reward).to(DEVICE)
+            batch_cost = torch.FloatTensor(batch_cost).to(DEVICE)
             batch_next_obs = torch.FloatTensor(batch_next_obs).to(DEVICE)
             batch_done = torch.FloatTensor(batch_done).to(DEVICE)
         
@@ -114,21 +120,25 @@ class ReplayBuffer(BaseBuffer):
             obs = batch_obs,
             action = batch_act,
             reward = batch_reward,
+            cost = batch_cost,
             next_obs = batch_next_obs,
             done = batch_done
         )
     
+
     def load_dataset(self, dataset):
         print('\033[1;34m Loading dataset ...\033[0m : ')
         observations = np.array(dataset["observations"])
         next_observations = np.array(dataset["next_observations"])
         actions = np.array(dataset["actions"])
         rewards = np.array(dataset["rewards"]).reshape(-1, 1)
+        costs = np.array(dataset["costs"]).reshape(-1, 1)
         dones = np.array(dataset["terminals"], dtype=np.float32).reshape(-1, 1)
 
         self.obs_buf = observations
         self.action_buf = actions
         self.reward_buf = rewards
+        self.cost_buf = costs
         self.next_obs_buf = next_observations
         self.done_buf = dones
 

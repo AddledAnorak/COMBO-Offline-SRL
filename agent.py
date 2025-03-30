@@ -10,8 +10,10 @@ from util.setting import DEVICE
 from util.helper import soft_update_network
 from copy import deepcopy
 from operator import itemgetter
-import gym
+import safety_gymnasium as gym
 import numpy as np
+
+from util.lagrange import Lagrange
 
 class Agent(BaseAgent):
     def __init__(self, obs_space, action_space, **kwargs) -> None:
@@ -30,34 +32,48 @@ class Agent(BaseAgent):
 
         self.discrete = False
         # initialize network
-        if type(action_space) == gym.spaces.discrete.Discrete:
-            raise ValueError('Unsupported for discrete action space!')
-        else:
-            self.out_dim = action_space.shape[0]
-            out_std = kwargs['policy_net']['out_std']
-            conditioned_std = kwargs['policy_net']['conditioned_std']
-            reparameter = kwargs['policy_net']['reparameter']
-            log_std = kwargs['policy_net']['log_std']
-            log_std_min = kwargs['policy_net']['log_std_min']
-            log_std_max = kwargs['policy_net']['log_std_max']
-            stable_log_prob = kwargs['policy_net']['stable_log_prob']
+        # NOTE: does not work for discrete action space!
+        self.out_dim = action_space.shape[0]
+        out_std = kwargs['policy_net']['out_std']
+        conditioned_std = kwargs['policy_net']['conditioned_std']
+        reparameter = kwargs['policy_net']['reparameter']
+        log_std = kwargs['policy_net']['log_std']
+        log_std_min = kwargs['policy_net']['log_std_min']
+        log_std_max = kwargs['policy_net']['log_std_max']
+        stable_log_prob = kwargs['policy_net']['stable_log_prob']
 
-            self.policy_net = GaussPolicy(self.obs_dim, action_space, hidden_dims_pi, act_fun_pi, out_act_fun_pi, 
-                                           out_std, conditioned_std, reparameter, log_std, log_std_min, log_std_max, stable_log_prob).to(DEVICE)
-            self.q1 = QNet(self.obs_dim + self.out_dim, 1, hidden_dims_q, act_fun_q, out_act_fun_q).to(DEVICE)
-            self.q2 = QNet(self.obs_dim + self.out_dim, 1, hidden_dims_q, act_fun_q, out_act_fun_q).to(DEVICE)
-            self.target_q1 = deepcopy(self.q1)
-            self.target_q2 = deepcopy(self.q2)
+        self.policy_net = GaussPolicy(self.obs_dim, action_space, hidden_dims_pi, act_fun_pi, out_act_fun_pi, 
+                                        out_std, conditioned_std, reparameter, log_std, log_std_min, log_std_max, stable_log_prob).to(DEVICE)
+        self.q1 = QNet(self.obs_dim + self.out_dim, 1, hidden_dims_q, act_fun_q, out_act_fun_q).to(DEVICE)
+        self.q2 = QNet(self.obs_dim + self.out_dim, 1, hidden_dims_q, act_fun_q, out_act_fun_q).to(DEVICE)
+        self.target_q1 = deepcopy(self.q1)
+        self.target_q2 = deepcopy(self.q2)
+
+        self.cost_limit = kwargs['lagrange']['cost_limit']
+        self.lambda_optimizer = kwargs['lagrange']['lambda_optimizer']
+        self.lambda_lr = kwargs['lagrange']['lambda_lr']
+        self.lambda_init = kwargs['lagrange']['lambda_init']
+        self.lambda_upper_bound = kwargs['lagrange']['lambda_upper_bound']
+
+        self.lagrange = Lagrange(self.cost_limit, self.lambda_init, self.lambda_lr, self.lambda_optimizer, self.lambda_upper_bound)
+
+        # create cost q networks
+        self.cost_q = QNet(self.obs_dim + self.out_dim, 1, hidden_dims_q, act_fun_q, out_act_fun_q).to(DEVICE)
+        self.target_cost_q = deepcopy(self.cost_q)
         
         self.networks = {
             'policy_net' : self.policy_net,
             'critic_net1' : self.q1,
-            'critic_net2' : self.q2
+            'critic_net2' : self.q2,
+            'cost_critic_net' : self.cost_q
         }
+
         # optimizer
         self.q1_opt = get_optimizer(kwargs['q_net']['opt_name'], self.q1, kwargs['q_net']['learning_rate'])
         self.q2_opt = get_optimizer(kwargs['q_net']['opt_name'], self.q2, kwargs['q_net']['learning_rate'])
+        self.cost_q_opt = get_optimizer(kwargs['q_net']['opt_name'], self.cost_q, kwargs['q_net']['learning_rate'])
         self.policy_opt = get_optimizer(kwargs['policy_net']['opt_name'], self.policy_net, kwargs['policy_net']['learning_rate'])
+
         # entropy
         self.alpha = kwargs['alpha']
         self.auto_alpha = kwargs['entropy']['auto_alpha']
@@ -78,29 +94,39 @@ class Agent(BaseAgent):
     def update_target_network(self):
         soft_update_network(self.target_q1, self.q1, self.tau)
         soft_update_network(self.target_q2, self.q2, self.tau)
+        soft_update_network(self.target_cost_q, self.cost_q, self.tau)
         
     def update(self, batch_data):
         obs = batch_data['obs']
         actions = batch_data['action']
         next_obs = batch_data['next_obs']
         rewards = batch_data['reward']
+        costs = batch_data['cost']
         dones = batch_data['done']
 
         # critic loss
         cur_state_q1_values = self.q1(torch.cat([obs, actions], dim = 1))
         cur_state_q2_values = self.q2(torch.cat([obs, actions], dim = 1))
+
+        # cost critic loss
+        cur_state_cost_q_values = self.cost_q(torch.cat([obs, actions], dim = 1))
         
         with torch.no_grad():
             next_state_action, next_state_log_pi = \
                 itemgetter('action', 'log_prob')(self.policy_net.sample(next_obs))
+            
             next_state_q1_value = self.target_q1(torch.cat([next_obs, next_state_action], dim = 1))
             next_state_q2_value = self.target_q2(torch.cat([next_obs, next_state_action], dim = 1))
             next_state_min_q = torch.min(next_state_q1_value, next_state_q2_value)
             target_q = (next_state_min_q - self.alpha * next_state_log_pi)
             target_q  = rewards + self.gamma * (1.0 - dones) * target_q
+
+            next_state_cost_q_value = self.target_cost_q(torch.cat([next_obs, next_state_action], dim = 1))
+            target_cost_q = costs + self.gamma * (1.0 - dones) * next_state_cost_q_value # no regularization here
         
         q1_td_loss = F.mse_loss(cur_state_q1_values, target_q)
         q2_td_loss = F.mse_loss(cur_state_q2_values, target_q)
+        cost_q_td_loss = F.mse_loss(cur_state_cost_q_values, target_cost_q)
         # q1_loss = q1_td_loss
         # q2_loss = q2_td_loss
         # self.q1_opt.zero_grad()
@@ -109,6 +135,11 @@ class Agent(BaseAgent):
         # self.q2_opt.zero_grad()
         # q2_td_loss.backward()
         # self.q2_opt.step()
+
+        # normal loss for cost critic
+        self.cost_q_opt.zero_grad()
+        cost_q_td_loss.backward()
+        self.cost_q_opt.step()
 
         # cql loss
         batch_size = batch_data['obs'].shape[0]
@@ -167,6 +198,9 @@ class Agent(BaseAgent):
         cur_state_action_q2 = self.q2(torch.cat([obs, cur_state_action], dim = 1))
         cur_state_action_q = torch.min(cur_state_action_q1, cur_state_action_q2)
         actot_loss = ((self.alpha * cur_state_log_pi) - cur_state_action_q).mean()
+        # cost actor loss
+        cur_state_cost = self.cost_q(torch.cat([obs, cur_state_action], dim = 1))
+        actor_cost_loss = (self.lagrange.lagrangian_multiplier.item() * cur_state_cost).mean()
         if self.auto_alpha:
             alpha_loss = -(self.log_alpha * (cur_state_log_pi + self.target_entropy).detach()).mean()
             alpha_loss_value = alpha_loss.detach().cpu().item()
@@ -175,20 +209,26 @@ class Agent(BaseAgent):
             alpha_loss = 0.0
             alpha_loss_value = 0.0
         self.policy_opt.zero_grad()
-        (actot_loss + alpha_loss).backward()
+        (actor_cost_loss + actot_loss + alpha_loss).backward()
         self.policy_opt.step()
         if self.auto_alpha:
             self.alpha_opt.step()
             self.alpha = self.log_alpha.detach().exp() 
         self.update_target_network()
 
+        # udpate the lagrange multiplier
+        self.lagrange.update_lagrangian_multiplier(cur_state_cost.mean().item())
+
         return {
-            'loss/policy' : actot_loss.item(),
+            'loss/policy_reward' : actot_loss.item(),
+            'loss/policy_cost' : actor_cost_loss.item(),
             'loss/q1' : q1_loss.item(),
             'loss/q2' : q2_loss.item(),
+            'loss/cost_critic' : cost_q_td_loss.item(),
             'loss/alpha' : alpha_loss_value,
             'misc/entroy_alpha' : self.alpha.item()
         }
+    
 
     def choose_action(self, state, deterministic=True):
         flag = False
