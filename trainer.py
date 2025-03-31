@@ -2,6 +2,7 @@ from util.trainers import BaseTrainer
 from util.setting import DEVICE
 from util.buffer import ReplayBuffer
 from util.helper import dict_batch_generator
+from dynamic.transition_model import TransitionModel
 import torch
 import numpy as np
 from tqdm import tqdm
@@ -15,7 +16,7 @@ class Trainer(BaseTrainer):
                  log,
                  offline_buffer,
                  model_buffer,
-                 dynamic_model,
+                 dynamic_model: TransitionModel,
                  task,
                  **kwargs
                 ) -> None:
@@ -50,20 +51,16 @@ class Trainer(BaseTrainer):
         self.train_env.set_target_cost(kwargs['cost_limit'])
         self.eval_env.set_target_cost(kwargs['cost_limit'])
 
-    # TODO: change this to not go out of memory
     def train_dynamic(self):
         # get train and eval data
         max_sample_size = self.offline_buffer.allow_size
         num_train_data = int(max_sample_size * (1.0 - self.hold_out_ratio))
 
-        print(max_sample_size, self.hold_out_ratio, num_train_data)
-        input()
-
         env_data = self.offline_buffer.sample(batch_size = max_sample_size)
         train_data, eval_data = {}, {}
         for key in env_data.keys():
-            train_data[key] = torch.tensor(env_data[key][:num_train_data]).to(DEVICE)
-            eval_data[key] = torch.tensor(env_data[key][num_train_data:]).to(DEVICE)
+            train_data[key] = env_data[key][:num_train_data].clone().detach().to(DEVICE)
+            eval_data[key] = env_data[key][num_train_data:].clone().detach().to(DEVICE)
         self.dynamics_model.reset_normalizers()
         self.dynamics_model.update_normalizer(train_data['obs'], train_data['action'])
 
@@ -76,21 +73,13 @@ class Trainer(BaseTrainer):
 
         # init eval_mse_losses
         self.log.print("Start training dynamics")
-        
-        # DEBUG
-        for k, v in eval_data.items():
-            print(f"{k}: {v.shape}")
-        input()
-
-
-
         eval_mse_losses, _ = self.dynamics_model.eval_data(eval_data, update_elite_models=False)
         self.log.record("loss/model_eval_mse_loss", eval_mse_losses.mean(), self.model_tot_train_timesteps)
         updated = self.dynamics_model.update_best_snapshots(eval_mse_losses)
         while not break_training:
-    
-            for train_data_batch in dict_batch_generator(train_data, self.model_batch_size):
-                
+
+            total = int(np.ceil(len(train_data['obs']) / self.model_batch_size))
+            for train_data_batch in tqdm(dict_batch_generator(train_data, self.model_batch_size), total=total):
                 model_log_infos = self.dynamics_model.update(train_data_batch)
                 model_train_iters += 1
                 self.model_tot_train_timesteps += 1
@@ -106,7 +95,7 @@ class Trainer(BaseTrainer):
             if num_epochs_since_prev_best >= self.max_model_update_epochs_to_improve or model_train_iters > self.max_model_train_iterations\
                     or self.model_tot_train_timesteps > 1000000:
                 break
-            # Debug
+
         self.dynamics_model.load_best_snapshots()
        
         # evaluate data to update the elite models

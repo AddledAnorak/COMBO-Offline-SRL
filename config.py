@@ -56,7 +56,7 @@ trainer_config = {
         'learning_rate' : 1e-3,
         'reward_penalty_coef' : 0.0,
         'cost_penalty_coef' : 0.0,
-        'hold_out_ratio' : 0.1,
+        'hold_out_ratio' : 0.01,
         'max_model_update_epochs_to_improve': 5,
         'max_train_iteraions' : None,
         'rollout_length' : 3,
