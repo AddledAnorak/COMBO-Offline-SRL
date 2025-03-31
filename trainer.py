@@ -50,10 +50,15 @@ class Trainer(BaseTrainer):
         self.train_env.set_target_cost(kwargs['cost_limit'])
         self.eval_env.set_target_cost(kwargs['cost_limit'])
 
+    # TODO: change this to not go out of memory
     def train_dynamic(self):
         # get train and eval data
         max_sample_size = self.offline_buffer.allow_size
         num_train_data = int(max_sample_size * (1.0 - self.hold_out_ratio))
+
+        print(max_sample_size, self.hold_out_ratio, num_train_data)
+        input()
+
         env_data = self.offline_buffer.sample(batch_size = max_sample_size)
         train_data, eval_data = {}, {}
         for key in env_data.keys():
@@ -71,6 +76,14 @@ class Trainer(BaseTrainer):
 
         # init eval_mse_losses
         self.log.print("Start training dynamics")
+        
+        # DEBUG
+        for k, v in eval_data.items():
+            print(f"{k}: {v.shape}")
+        input()
+
+
+
         eval_mse_losses, _ = self.dynamics_model.eval_data(eval_data, update_elite_models=False)
         self.log.record("loss/model_eval_mse_loss", eval_mse_losses.mean(), self.model_tot_train_timesteps)
         updated = self.dynamics_model.update_best_snapshots(eval_mse_losses)

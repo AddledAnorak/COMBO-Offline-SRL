@@ -24,6 +24,11 @@ def minibatch_inference(args, rollout_fn, batch_size=1000, cat_dim=0):
             inference_results = outputs
         else:
             if multi_op:
+                # print(i)
+                # print("outputs: ", outputs)
+                # input()
+                # print("inference_results: ", inference_results)
+                # input()
                 inference_results = (torch.cat([prev_re, op], dim=cat_dim) for prev_re, op in
                                      zip(inference_results, outputs))
             else:

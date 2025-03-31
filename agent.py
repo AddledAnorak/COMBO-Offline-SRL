@@ -217,7 +217,7 @@ class Agent(BaseAgent):
         self.update_target_network()
 
         # udpate the lagrange multiplier
-        self.lagrange.update_lagrangian_multiplier(cur_state_cost.mean().item())
+        self.lagrange.update_lagrange_multiplier(cur_state_cost.mean().item())
 
         return {
             'loss/policy_reward' : actot_loss.item(),

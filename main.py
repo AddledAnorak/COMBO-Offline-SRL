@@ -45,8 +45,8 @@ def train(args = get_args()):
 
     obs_space = env.observation_space
     act_space = env.action_space
-    # buffer
     offline_buffer = ReplayBuffer(obs_space, act_space, buffer_size = len(dataset['observations']))
+    # buffer
     offline_buffer.load_dataset(dataset)
     model_buffer = ReplayBuffer(obs_space, act_space, buffer_size = len(dataset['observations']))
     # agent

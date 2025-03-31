@@ -49,10 +49,10 @@ trainer_config = {
     'eval_interval' : 10,
     'log_interval' : 5,
     'eval_traj_num' : 10,
-    'batch_size' : 128,
+    'batch_size' : 32,
     'model' : {
         'hidden_dims' : [200, 200, 200, 200],
-        'batch_size' : 128,
+        'batch_size' : 32,
         'learning_rate' : 1e-3,
         'reward_penalty_coef' : 0.0,
         'cost_penalty_coef' : 0.0,
@@ -61,7 +61,7 @@ trainer_config = {
         'max_train_iteraions' : None,
         'rollout_length' : 3,
         'rollout_freq' : 2,
-        'rollout_batch_size' : 10000,
+        'rollout_batch_size' : 1000,
         'real_ratio' : 0.8
     }
 }

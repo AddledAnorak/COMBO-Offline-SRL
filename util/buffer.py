@@ -58,7 +58,7 @@ class ReplayBuffer(BaseBuffer):
 
         self.allow_size = 0
 
-    def add_transition(self, obs, action, reward, next_obs, done, cost):
+    def add_transition(self, obs, action, reward, cost, next_obs, done):
         self.obs_buf[self.cur] = obs
         self.action_buf[self.cur] = action
         self.reward_buf[self.cur] = reward
@@ -69,7 +69,7 @@ class ReplayBuffer(BaseBuffer):
         self.cur = (self.cur + 1) % self.buf_size
         self.allow_size = min(self.allow_size + 1, self.buf_size)
 
-    def add_traj(self, obs_list, action_list, reward_list, next_obs_list, done_list, cost_list):
+    def add_traj(self, obs_list, action_list, reward_list, cost_list, next_obs_list, done_list):
         for obs, action, reward, next_obs, done, cost in zip(obs_list, action_list, reward_list, next_obs_list, done_list, cost_list):
             self.add_transition(obs, action, reward, next_obs, done, cost)
 

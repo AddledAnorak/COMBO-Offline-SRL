@@ -77,9 +77,12 @@ class TransitionModel:
         self.obs_normalizer.update(obs)
         self.act_normalizer.update(action)
 
+    # TODO: fix this standard normalizer
     def transform_obs_action(self, obs, action):
-        obs = self.obs_normalizer.transform(obs)
-        action = self.act_normalizer.transform(action)
+        # obs = self.obs_normalizer.transform(obs)
+        # action = self.act_normalizer.transform(action)
+        obs = (obs - obs.mean(dim=0)) / (obs.std(dim=0) + 1e-8)
+        action = (action - action.mean(dim=0)) / (action.std(dim=0) + 1e-8)
         return obs, action
 
     def update(self, data_batch):
