@@ -42,7 +42,7 @@ class BaseTrainer(ABC):
             traj_return = 0
             traj_cost = 0
             traj_length = 0
-            state = self.eval_env.reset()
+            state, _ = self.eval_env.reset()
             for step in range(self.max_traj_len):
                 action = self.agent.choose_action(state, deterministic = True)['action']
                 # if len(action) == 1 and type(self.eval_env.action_space) == gym.spaces.discrete.Discrete :
