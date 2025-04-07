@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -245,3 +246,24 @@ class Agent(BaseAgent):
             'action' : action.detach().cpu().numpy(),
             'log_prob' : log_prob
         }
+    
+
+    def save_agent(self, info):
+        # save all network weights by creating subfolders
+        save_dir = os.path.join('./log/', 'models_pt')
+        save_dir = os.path.join(save_dir, f'ite_{info}')
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+        for network_name, network in self.networks.items():
+            save_path = os.path.join(save_dir, network_name + ".pt")
+            torch.save(network.state_dict(), save_path)
+
+
+    def load_agent(self, info):
+        save_dir = os.path.join('./log/', 'models_pt')
+        save_dir = os.path.join(save_dir, f'ite_{info}')
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+        for network_name, network in self.networks.items():
+            save_path = os.path.join(save_dir, network_name + ".pt")
+            network.load_state_dict(torch.load(save_path))

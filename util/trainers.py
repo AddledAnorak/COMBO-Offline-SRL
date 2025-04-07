@@ -4,10 +4,10 @@ import os
 import cv2
 from util.setting import LOG_PATH
 import gym
-
+from agent import Agent
 class BaseTrainer(ABC):
     def __init__(self, 
-                 agent, 
+                 agent: Agent, 
                  train_env,
                  eval_env,
                  log,

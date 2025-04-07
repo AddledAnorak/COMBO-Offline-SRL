@@ -6,11 +6,12 @@ from dynamic.transition_model import TransitionModel
 import torch
 import numpy as np
 from tqdm import tqdm
+from agent import Agent
 # import d4rl
 
 class Trainer(BaseTrainer):
     def __init__(self, 
-                 agent, 
+                 agent: Agent, 
                  train_env, 
                  eval_env,
                  log,
@@ -96,6 +97,8 @@ class Trainer(BaseTrainer):
                     or self.model_tot_train_timesteps > 1000000:
                 break
 
+            self.dynamics_model.save_model(self.model_tot_train_timesteps)
+
         self.dynamics_model.load_best_snapshots()
        
         # evaluate data to update the elite models
@@ -106,6 +109,8 @@ class Trainer(BaseTrainer):
         model_log_infos['misc/norm_act_var'] = torch.mean(torch.Tensor(self.dynamics_model.act_normalizer.var)).item()
         model_log_infos['misc/model_train_epochs'] = model_train_epochs
         model_log_infos['misc/model_train_train_steps'] = model_train_iters
+
+        self.dynamics_model.save_model('FINAL')
         
         return model_log_infos
     
@@ -159,6 +164,8 @@ class Trainer(BaseTrainer):
                     self.log.record(key, item, self.trained_epochs)
 
             self.trained_epochs += 1
+
+            self.agent.save_agent(self.trained_epochs)
 
         # tj_returns = []
         # tj_lengths = []
