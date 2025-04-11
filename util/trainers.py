@@ -47,7 +47,8 @@ class BaseTrainer(ABC):
                 action = self.agent.choose_action(state, deterministic = True)['action']
                 # if len(action) == 1 and type(self.eval_env.action_space) == gym.spaces.discrete.Discrete :
                 #     action = action[0]
-                next_state, reward, cost, done, _ = self.eval_env.step(action)
+                next_state, reward, cost, truncated, terminated, _ = self.eval_env.step(action)
+                done = truncated or terminated
                 state = next_state
                 traj_length += 1
                 traj_return += reward
