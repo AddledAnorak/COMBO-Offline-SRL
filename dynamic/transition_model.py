@@ -187,15 +187,15 @@ class TransitionModel:
 
         # penalty rewards
         if self.use_penalty:
-             penalty_coeff = self.reward_penalty_coef
+            penalty_coeff = self.reward_penalty_coef
         else:
-             penalty_coeff = 0
+            penalty_coeff = 0
 
         # penalty costs
         if self.use_penalty:
-             penalty_cost_coeff = self.cost_penalty_coef
+            penalty_cost_coeff = self.cost_penalty_coef
         else:
-             penalty_cost_coeff = 0
+            penalty_cost_coeff = 0
              
         penalty_learned_var = True
         if penalty_coeff != 0:

@@ -3,6 +3,7 @@ sys.path.append('.')
 import datetime
 import argparse
 import importlib
+import time
 import os
 from agent import Agent
 from trainer import Trainer
@@ -86,7 +87,10 @@ def train(args = get_args()):
                       task = args.task, 
                       **trainer_config)
     # train
+    start_time = time.time()
     trainer.train_dynamic()
+    end_time = time.time()
+    print(f"Training dynamic model takes {end_time - start_time} seconds.")
     trainer.train()
     # trainer.save_video_demo(ite = args.algo + '_' + args.task)
 

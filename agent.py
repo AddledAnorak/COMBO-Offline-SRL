@@ -220,14 +220,31 @@ class Agent(BaseAgent):
         # udpate the lagrange multiplier
         self.lagrange.update_lagrange_multiplier(cur_state_cost.mean().item())
 
+        # return {
+        #     'loss/policy_reward' : actot_loss.item(),
+        #     'loss/policy_cost' : actor_cost_loss.item(),
+        #     'loss/q1' : q1_loss.item(),
+        #     'loss/q2' : q2_loss.item(),
+        #     'loss/cost_critic' : cost_q_td_loss.item(),
+        #     'loss/alpha' : alpha_loss_value,
+        #     'misc/entroy_alpha' : self.alpha.item(),
+        # }
+
         return {
-            'loss/policy_reward' : actot_loss.item(),
-            'loss/policy_cost' : actor_cost_loss.item(),
-            'loss/q1' : q1_loss.item(),
-            'loss/q2' : q2_loss.item(),
-            'loss/cost_critic' : cost_q_td_loss.item(),
-            'loss/alpha' : alpha_loss_value,
-            'misc/entroy_alpha' : self.alpha.item()
+            'policy/net_loss': (actor_cost_loss + actot_loss + alpha_loss).item(),
+            'policy/cost_loss': actor_cost_loss.item(),
+            'policy/actor_loss': actot_loss.item(),
+            'policy/alpha_loss': alpha_loss_value,
+            'q1/net_loss': q1_loss.item(),
+            'q1/td_loss': q1_td_loss.item(),
+            'q1/min_loss': min_q1_loss.item(),
+            'q2/net_loss': q2_loss.item(),
+            'q2/td_loss': q2_td_loss.item(),
+            'q2/min_loss': min_q2_loss.item(),
+            'cost_critic/td_loss': cost_q_td_loss.item(),
+            'params/alpha': self.alpha.item(),
+            'params/lambda': self.lagrange.lagrangian_multiplier.item(),
+            'params/cql_weight': self.cql_weight
         }
     
 
